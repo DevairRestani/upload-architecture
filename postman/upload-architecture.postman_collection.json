@@ -1,0 +1,310 @@
+{
+  "info": {
+    "_postman_id": "18c9f0a8-76e7-4d94-85f4-a3c253f88b66",
+    "name": "Upload Architecture API",
+    "description": "Collection local para testar o fluxo da API: gerar URL assinada, enviar arquivo ao Blob Storage, confirmar upload e gerar URL assinada de download.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Docs",
+      "item": [
+        {
+          "name": "OpenAPI JSON",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "openapi",
+                "v1.json"
+              ]
+            },
+            "description": "Documento OpenAPI exposto em ambiente Development."
+          },
+          "response": []
+        },
+        {
+          "name": "Scalar UI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/scalar/v1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scalar",
+                "v1"
+              ]
+            },
+            "description": "Interface Scalar da API em ambiente Development."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "1. Create Upload URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('response has upload data', function () {",
+                  "  pm.expect(body.id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.uploadUrl).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.blobPath).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.expiresAt).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.environment.set('fileId', body.id);",
+                  "pm.environment.set('uploadUrl', body.uploadUrl);",
+                  "pm.environment.set('blobPath', body.blobPath);",
+                  "pm.environment.set('expiresAt', body.expiresAt);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"{{fileName}}\",\n  \"contentType\": \"{{contentType}}\",\n  \"sizeBytes\": {{sizeBytes}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/files/upload-url",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "files",
+                "upload-url"
+              ]
+            },
+            "description": "Cria o registro do arquivo e retorna uma URL SAS temporaria para upload direto no Blob Storage."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Upload Blob With Signed URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('blob upload succeeded', function () {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "x-ms-blob-type",
+                "value": "BlockBlob"
+              },
+              {
+                "key": "Content-Type",
+                "value": "{{contentType}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{sampleFileContent}}"
+            },
+            "url": {
+              "raw": "{{uploadUrl}}",
+              "host": [
+                "{{uploadUrl}}"
+              ]
+            },
+            "description": "Faz PUT do conteudo diretamente na URL assinada retornada pela API. Requer o Azurite rodando localmente."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Complete Upload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('upload completed', function () {",
+                  "  pm.expect(body.fileId).to.eql(pm.environment.get('fileId'));",
+                  "  pm.expect(body.status).to.eql('Uploaded');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/files/{{fileId}}/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "files",
+                "{{fileId}}",
+                "complete"
+              ]
+            },
+            "description": "Confirma o upload apos validar que o blob existe no storage."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Create Download URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('response has download data', function () {",
+                  "  pm.expect(body.fileId).to.eql(pm.environment.get('fileId'));",
+                  "  pm.expect(body.downloadUrl).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.expiresAt).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.environment.set('downloadUrl', body.downloadUrl);",
+                  "pm.environment.set('downloadExpiresAt', body.expiresAt);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/files/{{fileId}}/download-url",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "files",
+                "{{fileId}}",
+                "download-url"
+              ]
+            },
+            "description": "Gera uma URL SAS temporaria de leitura para baixar o arquivo enviado."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Download Blob With Signed URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('download succeeded', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('downloaded content matches sample', function () {",
+                  "  pm.expect(pm.response.text()).to.eql(pm.environment.get('sampleFileContent'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{downloadUrl}}",
+              "host": [
+                "{{downloadUrl}}"
+              ]
+            },
+            "description": "Baixa o arquivo diretamente da URL assinada retornada pela API."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": []
+}
