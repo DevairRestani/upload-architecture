@@ -75,7 +75,7 @@ public class FilesController : ControllerBase
         var extension = Path.GetExtension(request.FileName);
         var expiresAt = DateTime.UtcNow.AddMinutes(10);
 
-        var blobPath = $"uploads/{DateTime.UtcNow:yyyy/MM/dd}/{fileId}{extension}";
+        var blobPath = _blobStorageService.CreateUploadBlobPath(fileId, extension);
 
         var file = new FileRecord
         {
@@ -113,7 +113,14 @@ public class FilesController : ControllerBase
         var file = await _context.Files.FirstOrDefaultAsync(f => f.Id == id);
 
         if (file is null)
+        {
             return NotFound("File not found.");
+        }
+
+        if (file.Status != FileUploadStatus.Pending)
+        {
+            return BadRequest("File already completed.");
+        }
 
         if (file.UploadUrlExpiresAt < DateTime.UtcNow)
         {
@@ -124,13 +131,13 @@ public class FilesController : ControllerBase
 
             return BadRequest("Upload URL expired.");
         }
-
-        var blobExists = await _blobStorageService.ExistsAsync(file.BlobPath);
-
-        if (!blobExists)
-            return BadRequest("Blob was not uploaded.");
         
-        var blobLength = await _blobStorageService.GetLengthAsync(file.BlobPath);
+        var blobLength = await _blobStorageService.TryGetLengthAsync(file.BlobPath);
+
+        if (blobLength == null)
+        {
+            return BadRequest("Blob does not exist.");
+        }
 
         if (blobLength != file.SizeBytes)
         {
@@ -184,7 +191,7 @@ public class FilesController : ControllerBase
             return BadRequest("File is infected.");
         }
         
-        var blobExists = await _blobStorageService.ExistsAsync(file.BlobPath);
+        var blobExists = await _blobStorageService.ExistsOnFinalAsync(file.BlobPath);
 
         if (!blobExists)
         {

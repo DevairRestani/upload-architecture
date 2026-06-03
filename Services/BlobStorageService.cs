@@ -1,3 +1,4 @@
+using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Sas;
 
@@ -5,30 +6,40 @@ namespace upload_architecture.Services;
 
 public class BlobStorageService
 {
-    private readonly BlobContainerClient _containerClient;
+    private readonly BlobContainerClient _tempContainerClient;
+    private readonly BlobContainerClient _finalContainerClient;
     private readonly Uri? _publicEndpoint;
 
     public BlobStorageService(IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("BlobStorage");
-        var containerName = configuration["BlobStorage:ContainerName"];
+        var tempContainerName = configuration["BlobStorage:TempContainerName"];
+        var finalContainerName = configuration["BlobStorage:FinalContainerName"];
         var publicEndpoint = configuration["BlobStorage:PublicEndpoint"];
 
-        _containerClient = new BlobContainerClient(connectionString, containerName);
-        _containerClient.CreateIfNotExists();
+        _tempContainerClient = new BlobContainerClient(connectionString, tempContainerName);
+        _tempContainerClient.CreateIfNotExists();
+        
+        _finalContainerClient = new BlobContainerClient(connectionString, finalContainerName);
+        _finalContainerClient.CreateIfNotExists();
 
         _publicEndpoint = string.IsNullOrWhiteSpace(publicEndpoint)
             ? null
             : new Uri(publicEndpoint.TrimEnd('/'));
     }
 
+    public string CreateUploadBlobPath(Guid fileId, string extension)
+    {
+        return $"uploads/{DateTime.UtcNow:yyyy/MM/dd}/{fileId}{extension}";
+    }
+
     public string GenerateUploadUrl(string blobPath, DateTimeOffset expiresAt)
     {
-        var blobClient = _containerClient.GetBlobClient(blobPath);
+        var blobClient = _tempContainerClient.GetBlobClient(blobPath);
 
         var sasBuilder = new BlobSasBuilder
         {
-            BlobContainerName = _containerClient.Name,
+            BlobContainerName = _tempContainerClient.Name,
             BlobName = blobPath,
             Resource = "b",
             ExpiresOn = expiresAt
@@ -44,11 +55,11 @@ public class BlobStorageService
 
     public string GenerateDownloadUrl(string blobPath, DateTimeOffset expiresAt)
     {
-        var blobClient = _containerClient.GetBlobClient(blobPath);
+        var blobClient = _finalContainerClient.GetBlobClient(blobPath);
 
         var sasBuilder = new BlobSasBuilder
         {
-            BlobContainerName = _containerClient.Name,
+            BlobContainerName = _finalContainerClient.Name,
             BlobName = blobPath,
             Resource = "b",
             ExpiresOn = expiresAt
@@ -75,7 +86,7 @@ public class BlobStorageService
 
     public async Task<Stream> OpenReadAsync(string blobPath)
     {
-        var blobClient = _containerClient.GetBlobClient(blobPath);
+        var blobClient = _finalContainerClient.GetBlobClient(blobPath);
         
         var exists = await blobClient.ExistsAsync();
         if (!exists)
@@ -86,19 +97,32 @@ public class BlobStorageService
         return await blobClient.OpenReadAsync();
     }
 
-    public async Task<bool> ExistsAsync(string blobPath)
+    public async Task<bool> ExistsOnTempAsync(string blobPath)
     {
-        var blobClient = _containerClient.GetBlobClient(blobPath);
+        var blobClient = _tempContainerClient.GetBlobClient(blobPath);
+
+        return await blobClient.ExistsAsync();
+    }
+    
+    public async Task<bool> ExistsOnFinalAsync(string blobPath)
+    {
+        var blobClient = _finalContainerClient.GetBlobClient(blobPath);
 
         return await blobClient.ExistsAsync();
     }
 
-    public async Task<long> GetLengthAsync(string blobPath)
+    public async Task<long?> TryGetLengthAsync(string blobPath)
     {
-        var blobClient = _containerClient.GetBlobClient(blobPath);
+        var blobClient = _tempContainerClient.GetBlobClient(blobPath);
 
-        var properties = await blobClient.GetPropertiesAsync();
-        
-        return properties.Value.ContentLength;
+        try
+        {
+            var properties = await blobClient.GetPropertiesAsync();
+            return properties.Value.ContentLength;
+        }
+        catch (RequestFailedException ex) when (ex.Status == StatusCodes.Status404NotFound)
+        {
+            return null;
+        }
     }
 }
