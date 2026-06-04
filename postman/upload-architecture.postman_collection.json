@@ -74,13 +74,11 @@
                   "pm.test('response has upload data', function () {",
                   "  pm.expect(body.id).to.be.a('string').and.not.empty;",
                   "  pm.expect(body.uploadUrl).to.be.a('string').and.not.empty;",
-                  "  pm.expect(body.blobPath).to.be.a('string').and.not.empty;",
                   "  pm.expect(body.expiresAt).to.be.a('string').and.not.empty;",
                   "});",
                   "",
                   "pm.environment.set('fileId', body.id);",
                   "pm.environment.set('uploadUrl', body.uploadUrl);",
-                  "pm.environment.set('blobPath', body.blobPath);",
                   "pm.environment.set('expiresAt', body.expiresAt);"
                 ]
               }

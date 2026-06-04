@@ -29,7 +29,7 @@ Selecione o environment `Upload Architecture - Docker`.
    4. `Files / 4. Create Download URL`
    5. `Files / 5. Download Blob With Signed URL`
 
-As requests salvam automaticamente `fileId`, `uploadUrl`, `blobPath`, `expiresAt`, `downloadUrl` e `downloadExpiresAt` no environment.
+As requests salvam automaticamente `fileId`, `uploadUrl`, `expiresAt`, `downloadUrl` e `downloadExpiresAt` no environment.
 
 ## Variaveis principais
 

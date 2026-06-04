@@ -68,4 +68,3 @@ Depois selecione o environment `Upload Architecture - Docker` e rode as requests
 - O Docker Compose sobe API, Postgres, Azurite e ClamAV.
 - As URLs de upload/download sao assinadas e temporarias.
 - O arquivo `test-files/eicar-test.txt` pode ser usado para testar deteccao do ClamAV.
-- Mais detalhes do fluxo estao em `docs/architecture-and-flows.md`.

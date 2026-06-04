@@ -1,6 +1,5 @@
 export interface UploadUrlResponse {
   id: string;
-  blobPath: string;
   uploadUrl: string;
   expiresAt: string;
 }
@@ -19,7 +18,6 @@ export interface DownloadUrlResponse {
 export interface FileRecord {
   id: string;
   originalName: string;
-  blobPath: string;
   contentType: string;
   sizeBytes: number;
   status: "Pending" | "Uploaded" | "Validated" | "Failed" | "Expired" | string;

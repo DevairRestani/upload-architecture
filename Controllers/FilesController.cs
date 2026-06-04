@@ -117,9 +117,6 @@ public class FilesController : ControllerBase
         return Ok(new CreateUploadUrlResponse
         {
             Id = fileId,
-            BlobPath = finalBlobPath,
-            TempBlobPath = tempBlobPath,
-            FinalBlobPath = finalBlobPath,
             ExpiresAt =  expiresAt,
             UploadUrl = _blobStorageService.GenerateUploadUrl(tempBlobPath, expiresAt),
         });
@@ -256,9 +253,6 @@ public class FilesController : ControllerBase
         {
             Id = file.Id,
             OriginalName = file.OriginalName,
-            BlobPath = file.BlobPath,
-            TempBlobPath = file.TempBlobPath,
-            FinalBlobPath = file.BlobPath,
             ContentType = file.ContentType,
             SizeBytes = file.SizeBytes,
             Status = file.Status.ToString(),

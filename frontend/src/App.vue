@@ -329,7 +329,7 @@ onUnmounted(() => {
               <tr v-for="file in files" :key="file.id">
                 <td>
                   <strong>{{ file.originalName }}</strong>
-                  <small>{{ file.blobPath }}</small>
+                  <small>{{ file.contentType }}</small>
                 </td>
                 <td>{{ formatBytes(file.sizeBytes) }}</td>
                 <td>
