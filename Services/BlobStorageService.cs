@@ -1,5 +1,6 @@
 using Azure;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
 
 namespace upload_architecture.Services;
@@ -28,9 +29,14 @@ public class BlobStorageService
             : new Uri(publicEndpoint.TrimEnd('/'));
     }
 
-    public string CreateUploadBlobPath(Guid fileId, string extension)
+    public string CreateTempBlobPath(Guid fileId, string extension)
     {
-        return $"uploads/{DateTime.UtcNow:yyyy/MM/dd}/{fileId}{extension}";
+        return $"quarantine/{DateTime.UtcNow:yyyy/MM/dd}/{fileId}{extension}";
+    }
+
+    public string CreateFinalBlobPath(Guid fileId, string extension)
+    {
+        return $"files/{DateTime.UtcNow:yyyy/MM/dd}/{fileId}{extension}";
     }
 
     public string GenerateUploadUrl(string blobPath, DateTimeOffset expiresAt)
@@ -84,17 +90,43 @@ public class BlobStorageService
         return publicUri.Uri.ToString();
     }
 
-    public async Task<Stream> OpenReadAsync(string blobPath)
+    public async Task<Stream> OpenReadTempAsync(string blobPath)
     {
-        var blobClient = _finalContainerClient.GetBlobClient(blobPath);
+        var blobClient = _tempContainerClient.GetBlobClient(blobPath);
         
         var exists = await blobClient.ExistsAsync();
         if (!exists)
         {
-            throw new FileNotFoundException($"Blob {blobPath} not found");
+            throw new FileNotFoundException($"Blob {blobPath} not found in temp container");
         }
         
         return await blobClient.OpenReadAsync();
+    }
+
+    public async Task PromoteToFinalAsync(string tempBlobPath, string finalBlobPath, string contentType)
+    {
+        var sourceBlob = _tempContainerClient.GetBlobClient(tempBlobPath);
+        var destinationBlob = _finalContainerClient.GetBlobClient(finalBlobPath);
+
+        var exists = await sourceBlob.ExistsAsync();
+        if (!exists)
+        {
+            throw new FileNotFoundException($"Blob {tempBlobPath} not found in temp container");
+        }
+
+        await using var sourceStream = await sourceBlob.OpenReadAsync();
+
+        await destinationBlob.UploadAsync(
+            sourceStream,
+            new BlobUploadOptions
+            {
+                HttpHeaders = new BlobHttpHeaders
+                {
+                    ContentType = contentType
+                }
+            });
+
+        await sourceBlob.DeleteIfExistsAsync();
     }
 
     public async Task<bool> ExistsOnTempAsync(string blobPath)

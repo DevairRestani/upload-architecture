@@ -15,11 +15,18 @@ public class FilesController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly BlobStorageService _blobStorageService;
+    private readonly AllowedFileTypesService _allowedFileTypes;
+    private readonly long _maxFileSizeBytes;
 
-    public FilesController(AppDbContext context, BlobStorageService blobStorageService)
+    public FilesController(AppDbContext context, BlobStorageService blobStorageService,  AllowedFileTypesService allowedFileTypes, IConfiguration configuration)
     {
         _context = context;
         _blobStorageService = blobStorageService;
+        _allowedFileTypes = allowedFileTypes;
+        _maxFileSizeBytes =
+            configuration.GetValue<long?>("Upload:MaxSizeBytes") ??
+            configuration.GetValue<long?>("Upload:MaxFileSizeBytes") ??
+            52_428_800;
     }
 
     [HttpGet]
@@ -71,17 +78,29 @@ public class FilesController : ControllerBase
             return BadRequest("SizeBytes must be greater than zero.");
         }
 
+        if (request.SizeBytes > _maxFileSizeBytes)
+        {
+            return BadRequest($"File size exceeds maximum allowed {_maxFileSizeBytes} bytes.");
+        }
+
         var fileId = Guid.NewGuid();
         var extension = Path.GetExtension(request.FileName);
         var expiresAt = DateTime.UtcNow.AddMinutes(10);
 
-        var blobPath = _blobStorageService.CreateUploadBlobPath(fileId, extension);
+        if (!_allowedFileTypes.IsAllowedExtension(extension) || !_allowedFileTypes.IsAllowedMimeType(request.ContentType))
+        {
+            return BadRequest("File type is not allowed.");
+        }
+
+        var tempBlobPath = _blobStorageService.CreateTempBlobPath(fileId, extension);
+        var finalBlobPath = _blobStorageService.CreateFinalBlobPath(fileId, extension);
 
         var file = new FileRecord
         {
             Id = fileId,
             OriginalName = request.FileName,
-            BlobPath = blobPath,
+            BlobPath = finalBlobPath,
+            TempBlobPath = tempBlobPath,
             ContentType = request.ContentType,
             SizeBytes = request.SizeBytes,
             UploadUrlExpiresAt = expiresAt,
@@ -98,9 +117,11 @@ public class FilesController : ControllerBase
         return Ok(new CreateUploadUrlResponse
         {
             Id = fileId,
-            BlobPath = blobPath,
+            BlobPath = finalBlobPath,
+            TempBlobPath = tempBlobPath,
+            FinalBlobPath = finalBlobPath,
             ExpiresAt =  expiresAt,
-            UploadUrl = _blobStorageService.GenerateUploadUrl(blobPath, expiresAt),
+            UploadUrl = _blobStorageService.GenerateUploadUrl(tempBlobPath, expiresAt),
         });
     }
     
@@ -110,7 +131,15 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CompleteUploadResponse>> CompleteUpload(Guid id)
     {
-        var file = await _context.Files.FirstOrDefaultAsync(f => f.Id == id);
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var file = await _context.Files
+            .FromSqlRaw("""
+                        SELECT * FROM files 
+                                 WHERE Id = {0} 
+                                 FOR UPDATE
+                        """, id)
+            .FirstOrDefaultAsync();
 
         if (file is null)
         {
@@ -128,11 +157,12 @@ public class FilesController : ControllerBase
             file.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return BadRequest("Upload URL expired.");
         }
         
-        var blobLength = await _blobStorageService.TryGetLengthAsync(file.BlobPath);
+        var blobLength = await _blobStorageService.TryGetLengthAsync(file.TempBlobPath);
 
         if (blobLength == null)
         {
@@ -145,6 +175,7 @@ public class FilesController : ControllerBase
             file.UpdatedAt = DateTime.UtcNow;
             
             await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
             
             return BadRequest("Blob length does not match.");
         }
@@ -155,6 +186,7 @@ public class FilesController : ControllerBase
         file.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return Ok(new CompleteUploadResponse
         {
@@ -181,14 +213,19 @@ public class FilesController : ControllerBase
             return BadRequest("File is deleted.");
         }
 
-        if (file.Status != FileUploadStatus.Uploaded && file.Status != FileUploadStatus.Validated || file.ScanStatus != FileScanStatus.Clean)
+        if (file.Status != FileUploadStatus.Validated)
         {
             return BadRequest("File is not available for download.");
         }
 
-        if (file.ScanStatus == FileScanStatus.Infected)
+        if (file.ScanStatus != FileScanStatus.Clean)
         {
-            return BadRequest("File is infected.");
+            if (file.ScanStatus == FileScanStatus.Infected)
+            {
+                return BadRequest("File is infected.");
+            }
+            
+            return BadRequest("File has not been successfully scanned.");
         }
         
         var blobExists = await _blobStorageService.ExistsOnFinalAsync(file.BlobPath);
@@ -220,6 +257,8 @@ public class FilesController : ControllerBase
             Id = file.Id,
             OriginalName = file.OriginalName,
             BlobPath = file.BlobPath,
+            TempBlobPath = file.TempBlobPath,
+            FinalBlobPath = file.BlobPath,
             ContentType = file.ContentType,
             SizeBytes = file.SizeBytes,
             Status = file.Status.ToString(),

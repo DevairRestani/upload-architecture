@@ -22,6 +22,11 @@ public class FileRecord
     public string BlobPath { get; set; } = string.Empty;
 
     [Required]
+    [MaxLength(500)]
+    [Column("temp_blob_path")]
+    public string TempBlobPath { get; set; } = string.Empty;
+
+    [Required]
     [MaxLength(100)]
     [Column("content_type")]
     public string ContentType { get; set; } = string.Empty;

@@ -5,6 +5,8 @@ public class FileDetailsResponse
     public Guid Id { get; set; }
     public string OriginalName { get; set; } = string.Empty;
     public string BlobPath { get; set; } = string.Empty;
+    public string TempBlobPath { get; set; } = string.Empty;
+    public string FinalBlobPath { get; set; } = string.Empty;
     public string ContentType { get; set; } = string.Empty;
     public long SizeBytes { get; set; }
     public string Status { get; set; } = string.Empty;

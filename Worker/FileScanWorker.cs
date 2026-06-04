@@ -37,13 +37,21 @@ public class FileScanWorker : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var blobStorageService = scope.ServiceProvider.GetRequiredService<BlobStorageService>();
         var clamAvService = scope.ServiceProvider.GetRequiredService<ClamAvService>();
+        
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
         var file = await context.Files
-            .Where(f =>
-                f.Status == FileUploadStatus.Uploaded &&
-                f.ScanStatus == FileScanStatus.NotScanned &&
-                f.DeletedAt == null)
-            .OrderBy(f => f.CreatedAt)
+            .FromSqlRaw("""
+                        SELECT * FROM files
+                        WHERE status = {0}
+                        AND scan_status = {1}
+                        AND deleted_at IS NULL
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        FOR UPDATE SKIP LOCKED
+                        """, 
+                FileUploadStatus.Uploaded,
+                FileScanStatus.NotScanned)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (file == null) return;
@@ -52,6 +60,7 @@ public class FileScanWorker : BackgroundService
         file.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         try
         {
@@ -64,6 +73,7 @@ public class FileScanWorker : BackgroundService
                     _clamAvStreamMaxLengthBytes);
 
                 file.ScanStatus = FileScanStatus.Failed;
+                file.Status = FileUploadStatus.Failed;
                 file.ScannedAt = DateTime.UtcNow;
                 file.UpdatedAt = DateTime.UtcNow;
 
@@ -71,7 +81,7 @@ public class FileScanWorker : BackgroundService
                 return;
             }
 
-            await using var blobStream = await blobStorageService.OpenReadAsync(file.BlobPath);
+            await using var blobStream = await blobStorageService.OpenReadTempAsync(file.TempBlobPath);
             
             var scanResult = await clamAvService.ScanAsync(blobStream, cancellationToken);
 
@@ -82,6 +92,20 @@ public class FileScanWorker : BackgroundService
                 ClamAvScanResult.ExceededSizeLimit => FileScanStatus.Failed,
                 _ => FileScanStatus.Failed
             };
+
+            if (file.ScanStatus == FileScanStatus.Clean)
+            {
+                await blobStorageService.PromoteToFinalAsync(
+                    file.TempBlobPath,
+                    file.BlobPath,
+                    file.ContentType);
+
+                file.Status = FileUploadStatus.Validated;
+            }
+            else
+            {
+                file.Status = FileUploadStatus.Failed;
+            }
             
             file.ScannedAt =  DateTime.UtcNow;
             file.UpdatedAt = DateTime.UtcNow;
@@ -93,6 +117,7 @@ public class FileScanWorker : BackgroundService
             _logger.LogError(ex, ex.Message);
             
             file.ScanStatus = FileScanStatus.Failed;
+            file.Status = FileUploadStatus.Failed;
             file.UpdatedAt = DateTime.UtcNow;
             
             await context.SaveChangesAsync(cancellationToken);

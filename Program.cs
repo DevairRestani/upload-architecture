@@ -7,13 +7,16 @@ using upload_architecture.Worker;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddSingleton<BlobStorageService>();
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddSingleton<BlobStorageService>();
+builder.Services.AddSingleton<AllowedFileTypesService>();
 builder.Services.AddSingleton<ClamAvService>();
 
 builder.Services.AddHostedService<FileScanWorker>();
 
 builder.Services.AddControllers();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
