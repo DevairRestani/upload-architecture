@@ -1,42 +1,54 @@
 # Upload Architecture
 
-Projeto simples para testar uma arquitetura de upload de arquivos usando API, Blob Storage e banco de dados.
+Uma implementação de referência para um fluxo de upload seguro: o cliente envia arquivos diretamente para o Blob Storage com URLs assinadas, enquanto a API mantém o estado e libera o download somente após a validação antivírus.
 
-A API gera URLs assinadas para upload/download, salva os metadados no PostgreSQL e valida o arquivo enviado no Blob. Tambem tem um worker usando ClamAV para simular o fluxo de scan.
+## Fluxo
+
+1. O cliente solicita uma URL temporária em `POST /files/upload-url`.
+2. O arquivo é enviado diretamente para um blob temporário.
+3. O cliente confirma o envio em `POST /files/{id}/complete`.
+4. Um worker verifica o arquivo com ClamAV e, quando limpo, promove-o ao blob definitivo.
+5. A API gera uma URL temporária de download em `POST /files/{id}/download-url`.
+
+O backend valida extensão, MIME type, tamanho e comprimento do blob antes de marcar o arquivo como enviado. O download só é liberado para arquivos validados e limpos.
 
 ## Stack
 
-- ASP.NET Core / .NET 10
-- PostgreSQL
-- Azurite
-- ClamAV
-- Vue 3 + Vite no frontend
+- ASP.NET Core (.NET 10) e Entity Framework Core
+- PostgreSQL para metadados e estados do upload
+- Azure Blob Storage, usando Azurite no ambiente local
+- ClamAV para varredura antivírus
+- Vue 3 + Vite para a interface de demonstração
+- Docker Compose para o ambiente completo
 
-## Como rodar
+## Executar localmente
 
-Suba tudo pelo Docker Compose:
+Pré-requisito: Docker com Docker Compose.
 
 ```bash
 docker compose up -d --build
 ```
 
-A API fica em:
+Serviços locais:
 
-```text
-http://localhost:8080
-```
+| Serviço | Endereço |
+| --- | --- |
+| API | `http://localhost:8080` |
+| PostgreSQL | `localhost:5433` |
+| Azurite Blob | `http://localhost:10000` |
+| ClamAV | `localhost:3310` |
 
-O PostgreSQL fica exposto em `localhost:5433` e o Azurite em `localhost:10000`.
-
-Se o banco estiver vazio, aplique as migrations:
+O projeto inclui migrations. Caso o banco esteja vazio, aplique-as com:
 
 ```bash
 dotnet ef database update
 ```
 
-## Frontend
+Em desenvolvimento, a referência OpenAPI está disponível em `http://localhost:8080/scalar/v1`.
 
-Entre na pasta do frontend e rode:
+## Interface web
+
+Com a API e os serviços em execução:
 
 ```bash
 cd frontend
@@ -44,27 +56,24 @@ npm install
 npm run dev
 ```
 
-O Vite sobe em:
+A interface fica em `http://localhost:5173`. Ela cria a URL assinada, realiza o upload, confirma o arquivo e acompanha o status do processamento.
+
+## Testar a API
+
+Há uma collection no diretório [`postman/`](postman/). Importe a collection e o ambiente Docker, selecione **Upload Architecture - Docker** e execute as requisições na ordem.
+
+Para validar o fluxo de antivírus, use [`test-files/eicar-test.txt`](test-files/eicar-test.txt), uma assinatura de teste segura do EICAR.
+
+## Estrutura
 
 ```text
-http://localhost:5173
+Controllers/  endpoints HTTP do fluxo de arquivos
+Services/     Blob Storage, regras de tipos aceitos e ClamAV
+Worker/       varredura e promoção de arquivos
+Data/         contexto e migrations do PostgreSQL
+frontend/     aplicação Vue 3
 ```
 
-Por padrao, o frontend chama a API em `http://localhost:8080`.
+## Licença
 
-## Postman
-
-Tem uma collection pronta em `postman/`.
-
-Importe estes arquivos:
-
-- `upload-architecture.postman_collection.json`
-- `upload-architecture.docker.postman_environment.json`
-
-Depois selecione o environment `Upload Architecture - Docker` e rode as requests na ordem.
-
-## Observacoes
-
-- O Docker Compose sobe API, Postgres, Azurite e ClamAV.
-- As URLs de upload/download sao assinadas e temporarias.
-- O arquivo `test-files/eicar-test.txt` pode ser usado para testar deteccao do ClamAV.
+[MIT](LICENSE)
