@@ -38,11 +38,7 @@ Serviços locais:
 | Azurite Blob | `http://localhost:10000` |
 | ClamAV | `localhost:3310` |
 
-O projeto inclui migrations. Caso o banco esteja vazio, aplique-as com:
-
-```bash
-dotnet ef database update
-```
+As migrations são aplicadas automaticamente quando a API sobe.
 
 Em desenvolvimento, a referência OpenAPI está disponível em `http://localhost:8080/scalar/v1`.
 
@@ -52,8 +48,8 @@ Com a API e os serviços em execução:
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 A interface fica em `http://localhost:5173`. Ela cria a URL assinada, realiza o upload, confirma o arquivo e acompanha o status do processamento.

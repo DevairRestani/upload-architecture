@@ -25,7 +25,15 @@ public class FileScanWorker : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await ScanNextFile(stoppingToken);
+            try
+            {
+                await ScanNextFile(stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Falha ao varrer arquivos; nova tentativa em instantes.");
+            }
+
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
     }

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace upload_architecture.Migrations
 {
     /// <inheritdoc />
-    public partial class CreateFilesTable : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -18,6 +18,7 @@ namespace upload_architecture.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     original_name = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     blob_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    temp_blob_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     content_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     size_bytes = table.Column<long>(type: "bigint", nullable: false),
                     status = table.Column<int>(type: "integer", nullable: false),

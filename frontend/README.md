@@ -11,8 +11,8 @@ Frontend Vue 3 para operar o fluxo do backend:
 ## Rodar localmente
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 O Vite sobe em `http://localhost:5173`.

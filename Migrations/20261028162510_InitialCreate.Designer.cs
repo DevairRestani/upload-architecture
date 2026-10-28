@@ -12,8 +12,8 @@ using upload_architecture.Data;
 namespace upload_architecture.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260529000825_CreateFilesTable")]
-    partial class CreateFilesTable
+    [Migration("20261028162510_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -73,6 +73,12 @@ namespace upload_architecture.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
+
+                    b.Property<string>("TempBlobPath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("temp_blob_path");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

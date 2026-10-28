@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/files": {
-        target: "http://localhost:8080",
+        target: process.env.API_PROXY_TARGET ?? "http://localhost:8080",
         changeOrigin: true
       },
       "/blob": {
